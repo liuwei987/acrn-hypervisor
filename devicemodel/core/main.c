@@ -902,9 +902,11 @@ dm_run(int argc, char *argv[])
 	vmname = argv[0];
 
 	for (;;) {
+		(void)open_kmsg();
 		ctx = vm_create(vmname, (unsigned long)vhm_req_buf);
 		if (!ctx) {
 			perror("vm_open");
+			(void)close_kmsg();
 			exit(1);
 		}
 
@@ -996,6 +998,7 @@ dm_run(int argc, char *argv[])
 		_ctx = 0;
 
 		vm_set_suspend_mode(VM_SUSPEND_NONE);
+		(void)close_kmsg();
 	}
 
 vm_fail:
@@ -1006,6 +1009,7 @@ mevent_fail:
 	vm_unsetup_memory(ctx);
 fail:
 	vm_destroy(ctx);
+	(void)close_kmsg();
 	exit(0);
 }
 
