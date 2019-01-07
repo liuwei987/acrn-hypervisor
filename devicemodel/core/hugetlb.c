@@ -39,6 +39,7 @@
 #include <assert.h>
 
 #include "vmmapi.h"
+#include "dm.h"
 
 #define HUGETLB_LV1		0
 #define HUGETLB_LV2		1
@@ -636,12 +637,14 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		mount_hugetlbfs(level);
 
 	/* open hugetlbfs and get pagesize for two level */
+	(void)write_kmsg("open hugtlbfs begin----------------");
 	for (level = HUGETLB_LV1; level < hugetlb_lv_max; level++) {
 		if (open_hugetlbfs(ctx, level) < 0) {
 			perror("failed to open hugetlbfs");
 			goto err;
 		}
 	}
+	(void)write_kmsg("open hugtlbfs end------------------");
 
 	/* all memory should be at least aligned with
 	 * hugetlb_priv[HUGETLB_LV1].pg_size */
@@ -660,6 +663,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		total_size = 4 * GB + ctx->highmem;
 	else
 		total_size = ctx->lowmem;
+	(void)write_kmsg("total_size=[%d]M------------------", total_size/1024);
 
 	/* check & set hugetlb level memory size for lowmem/biosmem/highmem */
 	lowmem = ctx->lowmem;
@@ -684,12 +688,14 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		}
 	}
 
+	(void)write_kmsg("read hugtlbfs begin----------------");
 	/* it will check each level memory need */
 	has_gap = hugetlb_check_memgap();
 	if (has_gap) {
 		if (!hugetlb_reserve_pages())
 			goto err;
 	}
+	(void)write_kmsg("read hugtlbfs end------------------");
 
 	/* align up total size with huge page size for vma alignment */
 	for (level = hugetlb_lv_max - 1; level >= HUGETLB_LV1; level--) {
@@ -700,6 +706,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 	}
 
 	/* dump hugepage trying to setup */
+	(void)write_kmsg("dump hugtlbfs try setup begin----------------");
 	printf("\ntry to setup hugepage with:\n");
 	for (level = HUGETLB_LV1; level < hugetlb_lv_max; level++) {
 		printf("\tlevel %d - lowmem 0x%lx, biosmem 0x%lx, highmem 0x%lx\n",
@@ -708,8 +715,10 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 			hugetlb_priv[level].biosmem,
 			hugetlb_priv[level].highmem);
 	}
+	(void)write_kmsg("dump hugtlbfs try setup end------------------");
 	printf("total_size 0x%lx\n\n", total_size);
 
+	(void)write_kmsg("map anony begin----------------");
 	/* basic overview vma */
 	ptr = mmap(NULL, total_size, PROT_NONE,
 			MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
@@ -717,6 +726,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		perror("anony mmap fail");
 		goto err;
 	}
+	(void)write_kmsg("map anony end----------------");
 
 	/* align up baseaddr according to hugepage level size */
 	for (level = hugetlb_lv_max - 1; level >= HUGETLB_LV1; level--) {
@@ -728,6 +738,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 	}
 	printf("mmap ptr 0x%p -> baseaddr 0x%p\n", ptr, ctx->baseaddr);
 
+	(void)write_kmsg("map hugtlbfs begin----------------");
 	/* mmap lowmem */
 	if (mmap_hugetlbfs(ctx, 0, get_lowmem_param, adj_lowmem_param) < 0) {
 		perror("lowmem mmap failed");
@@ -746,8 +757,10 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		perror("biosmem mmap failed");
 		goto err;
 	}
+	(void)write_kmsg("map hugtlbfs end------------------");
 
 	/* dump hugepage really setup */
+	(void)write_kmsg("dump hugtlbfs really setup begin----------------");
 	printf("\nreally setup hugepage with:\n");
 	for (level = HUGETLB_LV1; level < hugetlb_lv_max; level++) {
 		printf("\tlevel %d - lowmem 0x%lx, biosmem 0x%lx, highmem 0x%lx\n",
@@ -756,7 +769,9 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 			hugetlb_priv[level].biosmem,
 			hugetlb_priv[level].highmem);
 	}
+	(void)write_kmsg("dump hugtlbfs really setup end----------------");
 
+	(void)write_kmsg("map ept begin----------------");
 	/* map ept for lowmem */
 	if (vm_map_memseg_vma(ctx, ctx->lowmem, 0,
 		(uint64_t)ctx->baseaddr, PROT_ALL) < 0)
@@ -776,6 +791,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 			(uint64_t)(ctx->baseaddr + 4 * GB), PROT_ALL) < 0)
 			goto err;
 	}
+	(void)write_kmsg("map ept end------------------");
 
 	return 0;
 

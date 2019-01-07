@@ -73,11 +73,10 @@
 #define VHM_REQ_PIO_INVAL	(~0U)
 #define VHM_REQ_MMIO_INVAL	(~0UL)
 
+
+char *vmname = "acrn-dm";
 typedef void (*vmexit_handler_t)(struct vmctx *,
 		struct vhm_request *, int *vcpu);
-
-char *vmname;
-
 int guest_ncpus;
 char *guest_uuid_str;
 char *vsbl_file_name;
@@ -87,7 +86,6 @@ char *elf_file_name;
 uint8_t trusty_enabled;
 char *mac_seed;
 bool stdio_in_use;
-
 static int virtio_msix = 1;
 static bool debugexit_enabled;
 static char mac_seed_str[50];
@@ -95,17 +93,18 @@ static char mac_seed_str[50];
 static int acpi;
 
 static char *progname;
-static const int BSP;
+//static const int BSP;
 
+#if 0
 static cpuset_t cpumask;
 
 static void vm_loop(struct vmctx *ctx);
 
+#endif
 static char vhm_request_page[4096] __aligned(4096);
 
 static struct vhm_request *vhm_req_buf =
 				(struct vhm_request *)&vhm_request_page;
-
 struct dmstats {
 	uint64_t	vmexit_bogus;
 	uint64_t	vmexit_reqidle;
@@ -125,8 +124,7 @@ struct mt_vmm_info {
 
 static cpuset_t *vcpumap[VM_MAXCPU] = { NULL };
 
-static struct vmctx *_ctx;
-
+//static struct vmctx *_ctx;
 static void
 usage(int code)
 {
@@ -250,6 +248,8 @@ high_bios_size(void)
 	return roundup2(size, 2 * MB);
 }
 
+
+#if 0
 static void *
 start_thread(void *param)
 {
@@ -268,17 +268,20 @@ start_thread(void *param)
 	/* reset or halt */
 	return NULL;
 }
-
 static int
 add_cpu(struct vmctx *ctx, int guest_ncpus)
 {
 	int i;
 	int error;
 
+	(void)write_kmsg("%s add CPU begin\n", __func__, getpid());
 	for (i = 0; i < guest_ncpus; i++) {
+		(void)write_kmsg("%s add CPU in for\n", __func__, getpid());
 		error = vm_create_vcpu(ctx, (uint16_t)i);
 		if (error != 0) {
 			fprintf(stderr, "ERROR: could not create VCPU %d\n", i);
+			(void)write_kmsg("%s ERROR: could not create VCPU \n", __func__, getpid());
+			(void)write_kmsg("%s line:%dadd VCPU end\n", __func__, __LINE__, getpid());
 			return error;
 		}
 
@@ -293,6 +296,7 @@ add_cpu(struct vmctx *ctx, int guest_ncpus)
 	error = pthread_create(&mt_vmm_info[0].mt_thr, NULL,
 	    start_thread, &mt_vmm_info[0]);
 
+	(void)write_kmsg("%s line:%dadd VCPU end\n", __func__, __LINE__, getpid());
 	return error;
 }
 
@@ -392,7 +396,8 @@ vmexit_pci_emul(struct vmctx *ctx, struct vhm_request *vhm_req, int *pvcpu)
 #define	VMCS_IDENT(x)			((x) | 0x80000000)
 
 #endif	/* #ifdef DEBUG_EPT_MISCONFIG */
-
+#endif
+#if 0
 static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
 	[VM_EXITCODE_INOUT]  = vmexit_inout,
 	[VM_EXITCODE_MMIO_EMUL] = vmexit_mmio_emul,
@@ -658,7 +663,6 @@ vm_loop(struct vmctx *ctx)
 	}
 	printf("VM loop exit\n");
 }
-
 static int
 num_vcpus_allowed(struct vmctx *ctx)
 {
@@ -667,6 +671,7 @@ num_vcpus_allowed(struct vmctx *ctx)
 	 */
 	return VM_MAXCPU;
 }
+#endif
 
 static void
 sig_handler_term(int signo)
@@ -675,7 +680,6 @@ sig_handler_term(int signo)
 	vm_set_suspend_mode(VM_SUSPEND_POWEROFF);
 	mevent_notify();
 }
-
 enum {
 	CMD_OPT_VSBL = 1000,
 	CMD_OPT_OVMF,
@@ -709,7 +713,6 @@ static struct option long_options[] = {
 	{"version",		no_argument,		0, 'v' },
 	{"gvtargs",		required_argument,	0, 'G' },
 	{"help",		no_argument,		0, 'h' },
-
 	/* Following cmd option only has long option */
 #ifdef CONFIG_VM_CFG
 	{"vmcfg",		required_argument,	0, CMD_OPT_VMCFG},
@@ -731,20 +734,18 @@ static struct option long_options[] = {
 };
 
 static char optstr[] = "hAWYvE:k:r:B:p:c:s:m:l:U:G:i:";
-
 int
 dm_run(int argc, char *argv[])
 {
 	int c, error, err;
-	int max_vcpus, mptgen;
+	//int max_vcpus, mptgen;
+	//int err;
 	struct vmctx *ctx;
-	size_t memsize;
+	size_t memsize = 256 * MB;
 	int option_idx = 0;
-
 	progname = basename(argv[0]);
 	guest_ncpus = 1;
-	memsize = 256 * MB;
-	mptgen = 1;
+	//mptgen = 1;
 
 	if (signal(SIGHUP, sig_handler_term) == SIG_ERR)
 		fprintf(stderr, "cannot register handler for SIGHUP\n");
@@ -790,9 +791,13 @@ dm_run(int argc, char *argv[])
 			else
 				break;
 		case 'm':
+			printf("lww1\n");
 			error = vm_parse_memsize(optarg, &memsize);
-			if (error)
+			printf("memsize[0x%lx]\n", memsize);
+			if (error) {
+				printf("lww3\n");
 				errx(EX_USAGE, "invalid memsize '%s'", optarg);
+			}
 			break;
 		case 'U':
 			guest_uuid_str = optarg;
@@ -801,7 +806,7 @@ dm_run(int argc, char *argv[])
 			virtio_msix = 0;
 			break;
 		case 'Y':
-			mptgen = 0;
+			//mptgen = 0;
 			break;
 		case 'k':
 			if (acrn_parse_kernel(optarg) != 0)
@@ -826,6 +831,7 @@ dm_run(int argc, char *argv[])
 			}
 			break;
 		case 'v':
+			printf("lww2\n");
 			print_version();
 			break;
 		case CMD_OPT_VSBL:
@@ -901,46 +907,52 @@ dm_run(int argc, char *argv[])
 
 	vmname = argv[0];
 
-	for (;;) {
-		(void)open_kmsg();
+	//for (;;) {
+		//(void)write_kmsg("%s %d vm begin---\n", __func__, __LINE__);
+		(void)write_kmsg("vm begin---\n", __func__, __LINE__);
 		ctx = vm_create(vmname, (unsigned long)vhm_req_buf);
 		if (!ctx) {
 			perror("vm_open");
-			(void)close_kmsg();
 			exit(1);
 		}
-
+#if 0
 		if (guest_ncpus < 1) {
 			fprintf(stderr, "Invalid guest vCPUs (%d)\n",
 				guest_ncpus);
 			goto fail;
 		}
 
+		(void)write_kmsg("%s %d vm end---\n", __func__, __LINE__);
 		max_vcpus = num_vcpus_allowed(ctx);
 		if (guest_ncpus > max_vcpus) {
 			fprintf(stderr, "%d vCPUs requested but %d available\n",
 				guest_ncpus, max_vcpus);
 			goto fail;
 		}
-
+#endif
+		//(void)write_kmsg("%s %d num_vpcpu_allowed end---\n", __func__, __LINE__);
 		err = vm_setup_memory(ctx, memsize);
 		if (err) {
 			fprintf(stderr, "Unable to setup memory (%d)\n", errno);
-			goto fail;
+			exit(1);
 		}
-
+		(void)write_kmsg("vm end---\n", __func__, __LINE__);
+#if 0
+		(void)write_kmsg("%s %d vm_setup_memory end---\n", __func__, __LINE__);
 		err = mevent_init();
 		if (err) {
 			fprintf(stderr, "Unable to initialize mevent (%d)\n",
 				errno);
 			goto mevent_fail;
 		}
+		(void)write_kmsg("%s %d mevent_init end---\n", __func__, __LINE__);
 
 		if (vm_init_vdevs(ctx) < 0) {
 			fprintf(stderr, "Unable to init vdev (%d)\n", errno);
 			goto dev_fail;
 		}
 
+		(void)write_kmsg("%s %d vm_init_vdevs end---\n", __func__, __LINE__);
 		/*
 		 * build the guest tables, MP etc.
 		 */
@@ -951,20 +963,24 @@ dm_run(int argc, char *argv[])
 			}
 		}
 
+		(void)write_kmsg("%s %d mptable_build end---\n", __func__, __LINE__);
 		error = smbios_build(ctx);
 		if (error)
 			goto vm_fail;
 
+		(void)write_kmsg("%s %d smbios_build end---\n", __func__, __LINE__);
 		if (acpi) {
 			error = acpi_build(ctx, guest_ncpus);
 			if (error)
 				goto vm_fail;
 		}
 
+		(void)write_kmsg("%s %d acpi_build end---\n", __func__, __LINE__);
 		error = acrn_sw_load(ctx);
 		if (error)
 			goto vm_fail;
 
+		(void)write_kmsg("%s %d acrn_sw_load end---\n", __func__, __LINE__);
 		/*
 		 * Change the proc title to include the VM name.
 		 */
@@ -973,9 +989,11 @@ dm_run(int argc, char *argv[])
 		/*
 		 * Add CPU 0
 		 */
+		(void)write_kmsg("%s %d add_cpu begin---\n", __func__, __LINE__);
 		error = add_cpu(ctx, guest_ncpus);
 		if (error)
 			goto vm_fail;
+		(void)write_kmsg("%s %d add_cpu end---\n", __func__, __LINE__);
 
 		/* Make a copy for ctx */
 		_ctx = ctx;
@@ -984,6 +1002,7 @@ dm_run(int argc, char *argv[])
 		 * Head off to the main event dispatch loop
 		 */
 		mevent_dispatch();
+		(void)write_kmsg("%s %d mevent_dispatch end---\n", __func__, __LINE__);
 
 		vm_pause(ctx);
 		delete_cpu(ctx, BSP);
@@ -998,7 +1017,6 @@ dm_run(int argc, char *argv[])
 		_ctx = 0;
 
 		vm_set_suspend_mode(VM_SUSPEND_NONE);
-		(void)close_kmsg();
 	}
 
 vm_fail:
@@ -1006,10 +1024,9 @@ vm_fail:
 dev_fail:
 	mevent_deinit();
 mevent_fail:
+#endif
 	vm_unsetup_memory(ctx);
-fail:
 	vm_destroy(ctx);
-	(void)close_kmsg();
 	exit(0);
 }
 
