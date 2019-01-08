@@ -909,6 +909,7 @@ dm_run(int argc, char *argv[])
 
 	//for (;;) {
 		//(void)write_kmsg("%s %d vm begin---\n", __func__, __LINE__);
+		ftrace_set("nop");
 		(void)write_kmsg("vm begin---\n", __func__, __LINE__);
 		ctx = vm_create(vmname, (unsigned long)vhm_req_buf);
 		if (!ctx) {

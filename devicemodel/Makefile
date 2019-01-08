@@ -60,6 +60,7 @@ LIBS += -lacrn-mngr
 # lib
 SRCS += lib/dm_string.c
 SRCS += lib/dm_profiling.c
+SRCS += lib/dm_ftrace.c
 
 # hw
 SRCS += hw/block_if.c

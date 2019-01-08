@@ -233,6 +233,7 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 		return -EINVAL;
 	}
 
+	(void)write_kmsg("touch begin-----");
 	fd = hugetlb_priv[level].fd;
 	addr = mmap(ctx->baseaddr + offset, len, PROT_READ | PROT_WRITE,
 			MAP_SHARED | MAP_FIXED, fd, skip);
@@ -245,12 +246,13 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 	pagesz = hugetlb_priv[level].pg_size;
 
 	printf("touch %ld pages with pagesz 0x%lx\n", len/pagesz, pagesz);
+	(void)write_kmsg("touch %ld pages with pagesz 0x%lx, total=0x%lx\n", len/pagesz, pagesz, len);
 
 	for (i = 0; i < len/pagesz; i++) {
 		*(volatile char *)addr = *addr;
 		addr += pagesz;
 	}
-
+	(void)write_kmsg("touch end------");
 	return 0;
 }
 
@@ -618,15 +620,26 @@ bool check_hugetlb_support(void)
 
 int hugetlb_setup_memory(struct vmctx *ctx)
 {
-	int level;
+	int level, m_err;
 	size_t lowmem, biosmem, highmem;
 	bool has_gap;
+	pid_t m_pid;
 
 	if (ctx->lowmem == 0) {
 		perror("vm requests 0 memory");
 		goto err;
 	}
 
+	m_err = ftrace_set("function_graph");
+	if (m_err) {
+		goto err;
+	}
+
+	m_pid = getpid();
+	m_err = ftrace_pid(m_pid);
+	if (m_err) {
+		goto err;
+	}
 	/* for first time DM start UOS, hugetlbfs is already mounted by
 	 * check_hugetlb_support; but for reboot, here need re-mount
 	 * it as it already be umount by hugetlb_unsetup_memory
@@ -740,23 +753,34 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 
 	(void)write_kmsg("map hugtlbfs begin----------------");
 	/* mmap lowmem */
+	ftrace_shot("1");
+	ftrace_enable("1");
+	ftrace_switch("1");
+	(void)write_kmsg("map lowmem begin----------------");
 	if (mmap_hugetlbfs(ctx, 0, get_lowmem_param, adj_lowmem_param) < 0) {
 		perror("lowmem mmap failed");
 		goto err;
 	}
+	ftrace_switch("0");
+	ftrace_shot("0");
+	(void)write_kmsg("map lowmem end------------------");
 
 	/* mmap highmem */
+	(void)write_kmsg("map highmem begin----------------");
 	if (mmap_hugetlbfs(ctx, 4 * GB, get_highmem_param, adj_highmem_param) < 0) {
 		perror("highmem mmap failed");
 		goto err;
 	}
+	(void)write_kmsg("map highmem end------------------");
 
 	/* mmap biosmem */
+	(void)write_kmsg("map biosmem begin----------------");
 	if (mmap_hugetlbfs(ctx, 4 * GB - ctx->biosmem,
 				get_biosmem_param, adj_biosmem_param) < 0) {
 		perror("biosmem mmap failed");
 		goto err;
 	}
+	(void)write_kmsg("map biosmem end----------------");
 	(void)write_kmsg("map hugtlbfs end------------------");
 
 	/* dump hugepage really setup */
