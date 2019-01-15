@@ -287,9 +287,11 @@ vm_setup_memory(struct vmctx *ctx, size_t memsize)
 	if (memsize > ctx->lowmem_limit) {
 		ctx->lowmem = ctx->lowmem_limit;
 		ctx->highmem = memsize - ctx->lowmem_limit;
+		write_kmsg("%s 1 lowmem=0x%x, highmem=0x%x, limit=0x%x, memsize=0x%x\n", KMSG_FMT, ctx->lowmem, ctx->highmem, ctx->lowmem_limit, memsize);
 	} else {
 		ctx->lowmem = memsize;
 		ctx->highmem = 0;
+		write_kmsg("%s 2 lowmem=0x%x, highmem=0x%x, limit=0x%x, mmesize=0x%x\n", KMSG_FMT, ctx->lowmem, ctx->highmem, ctx->lowmem_limit, memsize);
 	}
 
 	ctx->biosmem = high_bios_size();

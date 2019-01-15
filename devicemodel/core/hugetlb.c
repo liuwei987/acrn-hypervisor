@@ -37,8 +37,10 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <assert.h>
+#include <pthread.h>
 
 #include "vmmapi.h"
+#include "dm.h"
 
 #define HUGETLB_LV1		0
 #define HUGETLB_LV2		1
@@ -232,11 +234,14 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 		return -EINVAL;
 	}
 
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
 	fd = hugetlb_priv[level].fd;
 	addr = mmap(ctx->baseaddr + offset, len, PROT_READ | PROT_WRITE,
 			MAP_SHARED | MAP_FIXED, fd, skip);
-	if (addr == MAP_FAILED)
+	if (addr == MAP_FAILED) {
+		write_kmsg("%s mamp failed\n", KMSG_FMT);
 		return -ENOMEM;
+	}
 
 	printf("mmap 0x%lx@%p\n", len, addr);
 
@@ -244,12 +249,16 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 	pagesz = hugetlb_priv[level].pg_size;
 
 	printf("touch %ld pages with pagesz 0x%lx\n", len/pagesz, pagesz);
+	write_kmsg("%s mmap 0x%lx@%p\n", KMSG_FMT, len, addr);
+	write_kmsg("%s touch %ld pages with pagesz 0x%lx\n", KMSG_FMT, len/pagesz, pagesz);
 
 	for (i = 0; i < len/pagesz; i++) {
 		*(volatile char *)addr = *addr;
+		//write_kmsg("%s loop addr=0x%p=0x%x[0x%x]\n", KMSG_FMT, addr, addr, *addr);
 		addr += pagesz;
 	}
 
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
 	return 0;
 }
 
@@ -260,12 +269,16 @@ static int mmap_hugetlbfs(struct vmctx *ctx, size_t offset,
 	size_t len, skip;
 	int level, ret = 0, pg_size;
 
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
 	for (level = hugetlb_lv_max - 1; level >= HUGETLB_LV1; level--) {
 		get_param(&hugetlb_priv[level], &len, &skip);
 		pg_size = hugetlb_priv[level].pg_size;
 
+		write_kmsg("%s hugetlb_pri[%d]\n", KMSG_FMT, level);
 		while (len > 0) {
 			assert((offset & (pg_size - 1)) == 0);
+			write_kmsg("%s hugetlb_pri[%d], offset=0x%x, skip=0x%x, len=0x%x\n", 
+					KMSG_FMT, level, offset, skip, len);
 			ret = mmap_hugetlbfs_from_level(ctx, level, len, offset, skip);
 
 			if (ret < 0 && level > HUGETLB_LV1) {
@@ -273,23 +286,154 @@ static int mmap_hugetlbfs(struct vmctx *ctx, size_t offset,
 						&hugetlb_priv[level], &hugetlb_priv[level-1],
 						pg_size);
 			} else if (ret < 0 && level == HUGETLB_LV1) {
+				write_kmsg("%s tlb_lv1 done", KMSG_FMT);
 				goto done;
 			} else {
 				offset += len;
+				write_kmsg("%s continue offset+=len", KMSG_FMT);
 				break;
 			}
 		}
 	}
 
 done:
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
 	return ret;
 }
 
+static void* mmap_1G_low_hugetlbfs(void *ctx)
+{
+	size_t len, skip, offset;
+	int level, ret = 0, pg_size;
+	ret = ret;
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
+	level = 1;
+	skip = 0;
+	offset = 0;
+	pg_size = hugetlb_priv[level].pg_size;
+	len = 0x40000000;
+	assert((offset & (pg_size - 1)) == 0);
+	ret = mmap_hugetlbfs_from_level((struct vmctx *)ctx, level, len, offset, skip);
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
+	return ctx;
+}
+
+#if 0
+static void* mmap_2G_low_hugetlbfs(void *ctx)
+{
+	size_t len, skip, offset;
+	int level, ret = 0, pg_size;
+	ret = ret;
+
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
+	level = 1;
+	offset = 0;
+	skip = 0x40000000;
+	pg_size = hugetlb_priv[level].pg_size;
+	len = 0x40000000;
+	assert((offset & (pg_size - 1)) == 0);
+	ret = mmap_hugetlbfs_from_level((struct vmctx *)ctx, level, len, offset, skip);
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
+	return ctx;
+}
+
+static void* mmap_3G_high_hugetlbfs(void *ctx)
+{
+	size_t len, skip, offset;
+	int level, ret = 0, pg_size;
+	ret = ret;
+
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
+	level = 1;
+	skip = 0x80000000;
+	len = 0x40000000;
+	offset = 0;
+	pg_size = hugetlb_priv[level].pg_size;
+
+	write_kmsg("%s hugetlb_pri[%d]\n", KMSG_FMT, level);
+	assert((offset & (pg_size - 1)) == 0);
+	write_kmsg("%s hugetlb_pri[%d], offset=0x%x, skip=0x%x, len=0x%x\n", KMSG_FMT, level, offset, skip, len);
+	ret = mmap_hugetlbfs_from_level((struct vmctx *)ctx, level, len, offset, skip);
+
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
+	return ctx;
+}
+
+static void* mmap_4G_high_hugetlbfs(void *ctx)
+{
+	size_t len, skip, offset;
+	int level, ret = 0, pg_size;
+	ret = ret;
+
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
+	level = 1;
+	skip = 0xc0000000;
+	len  = 0x40000000;
+	offset = 0;
+	pg_size = hugetlb_priv[level].pg_size;
+
+	write_kmsg("%s hugetlb_pri[%d]\n", KMSG_FMT, level);
+	assert((offset & (pg_size - 1)) == 0);
+	write_kmsg("%s hugetlb_pri[%d], offset=0x%x, skip=0x%x, len=0x%x\n", KMSG_FMT, level, offset, skip, len);
+	ret = mmap_hugetlbfs_from_level((struct vmctx *)ctx, level, len, offset, skip);
+
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
+	return ctx;
+}
+
+static void* mmap_5G_high_hugetlbfs(void *ctx)
+{
+	size_t len, skip, offset;
+	int level, ret = 0, pg_size;
+	ret = ret;
+
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
+	level = 0;
+	skip = 0;
+	len = 0x40000000;
+	offset = 0x40000000;
+	pg_size = hugetlb_priv[level].pg_size;
+	pg_size = pg_size;
+
+	write_kmsg("%s hugetlb_pri[%d]\n", KMSG_FMT, level);
+	//assert((offset & (pg_size - 1)) == 0);
+	write_kmsg("%s hugetlb_pri[%d], offset=0x%x, skip=0x%x, len=0x%x\n", KMSG_FMT, level, offset, skip, len);
+	ret = mmap_hugetlbfs_from_level((struct vmctx *)ctx, level, len, offset, skip);
+
+
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
+	return ctx;
+}
+static void* mmap_6G_high_hugetlbfs(void*ctx)
+{
+	size_t len, skip, offset;
+	int level, ret = 0, pg_size;
+	ret = ret;
+
+	write_kmsg("%s %s begin---", KMSG_FMT, __func__);
+	level = 0;
+	skip = 0;
+	len =    0x40000000;
+	offset = 0x80000000;
+	pg_size = hugetlb_priv[level].pg_size;
+	pg_size = pg_size;
+
+	write_kmsg("%s hugetlb_pri[%d]\n", KMSG_FMT, level);
+	//assert((offset & (pg_size - 1)) == 0);
+	write_kmsg("%s hugetlb_pri[%d], offset=0x%x, skip=0x%x, len=0x%x\n", KMSG_FMT, level, offset, skip, len);
+	ret = mmap_hugetlbfs_from_level((struct vmctx *)ctx, level, len, offset, skip);
+
+	write_kmsg("%s %s end---", KMSG_FMT, __func__);
+	return ctx;
+}
+#endif
+#if 0
 static void get_lowmem_param(struct hugetlb_info *htlb,
 		size_t *len, size_t *skip)
 {
 	*len = htlb->lowmem;
 	*skip = 0; /* nothing to skip as lowmen is mmap'ed first */
+	write_kmsg("%s %s\n", KMSG_FMT, __func__);
 }
 
 static size_t adj_lowmem_param(struct hugetlb_info *htlb,
@@ -298,6 +442,7 @@ static size_t adj_lowmem_param(struct hugetlb_info *htlb,
 	assert(htlb->lowmem >= adj_size);
 	htlb->lowmem -= adj_size;
 	htlb_prev->lowmem += adj_size;
+	write_kmsg("%s %s\n", KMSG_FMT, __func__);
 
 	return htlb->lowmem;
 }
@@ -307,6 +452,7 @@ static void get_highmem_param(struct hugetlb_info *htlb,
 {
 	*len = htlb->highmem;
 	*skip = htlb->lowmem;
+	write_kmsg("%s %s\n", KMSG_FMT, __func__);
 }
 
 static size_t adj_highmem_param(struct hugetlb_info *htlb,
@@ -315,9 +461,11 @@ static size_t adj_highmem_param(struct hugetlb_info *htlb,
 	assert(htlb->highmem >= adj_size);
 	htlb->highmem -= adj_size;
 	htlb_prev->highmem += adj_size;
+	write_kmsg("%s %s\n", KMSG_FMT, __func__);
 
 	return htlb->highmem;
 }
+#endif
 
 static void get_biosmem_param(struct hugetlb_info *htlb,
 		size_t *len, size_t *skip)
@@ -325,7 +473,6 @@ static void get_biosmem_param(struct hugetlb_info *htlb,
 	*len = htlb->biosmem;
 	*skip = htlb->lowmem + htlb->highmem;
 }
-
 static size_t adj_biosmem_param(struct hugetlb_info *htlb,
 		struct hugetlb_info *htlb_prev, int adj_size)
 {
@@ -620,6 +767,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 	int level;
 	size_t lowmem, biosmem, highmem;
 	bool has_gap;
+	pthread_t vm_thread1;// vm_thread2, vm_thread3, vm_thread4, vm_thread5;// vm_thread6;
 
 	if (ctx->lowmem == 0) {
 		perror("vm requests 0 memory");
@@ -723,29 +871,48 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		if (should_enable_hugetlb_level(level)) {
 			ctx->baseaddr = (void *)ALIGN_UP((size_t)ptr,
 						hugetlb_priv[level].pg_size);
+			write_kmsg("%s 1G mmap ctx -> baseaddr 0x%p\n", KMSG_FMT, ctx->baseaddr);
 			break;
 		}
+	write_kmsg("%s 2M mmap ptr ctx -> baseaddr 0x%p\n", KMSG_FMT, ctx->baseaddr);
 	}
 	printf("mmap ptr 0x%p -> baseaddr 0x%p\n", ptr, ctx->baseaddr);
 
+	write_kmsg("%s total_size=0x%x\n", KMSG_FMT, total_size);
+	write_kmsg("%s final mmap ptr 0x%p -> baseaddr 0x%p\n", KMSG_FMT, ptr, ctx->baseaddr);
+	write_kmsg("%s before mmap lowmem=0x%x, highmem=0x%x,\n", KMSG_FMT, ctx->lowmem, ctx->highmem);
 	/* mmap lowmem */
+#if 0
+	write_kmsg("%s map lowmem begin---", KMSG_FMT);
 	if (mmap_hugetlbfs(ctx, 0, get_lowmem_param, adj_lowmem_param) < 0) {
 		perror("lowmem mmap failed");
 		goto err;
 	}
 
+	write_kmsg("%s map lowmem end---", KMSG_FMT);
+
 	/* mmap highmem */
+	write_kmsg("%s map highmem begin---", KMSG_FMT);
 	if (mmap_hugetlbfs(ctx, 4 * GB, get_highmem_param, adj_highmem_param) < 0) {
 		perror("highmem mmap failed");
 		goto err;
 	}
-
+	write_kmsg("%s map highmem end---", KMSG_FMT);
+#endif
+	pthread_create(&vm_thread1, NULL, mmap_1G_low_hugetlbfs, ctx);
+	//pthread_create(&vm_thread2, NULL, mmap_2G_low_hugetlbfs, ctx);
+	//pthread_create(&vm_thread3, NULL, mmap_3G_high_hugetlbfs, ctx);
+	//pthread_create(&vm_thread4, NULL, mmap_4G_high_hugetlbfs, ctx);
+	//pthread_create(&vm_thread5, NULL, mmap_5G_high_hugetlbfs, ctx);
+	//pthread_create(&vm_thread6, NULL, mmap_6G_high_hugetlbfs, ctx);
 	/* mmap biosmem */
+	write_kmsg("%s map bios begin---", KMSG_FMT);
 	if (mmap_hugetlbfs(ctx, 4 * GB - ctx->biosmem,
 				get_biosmem_param, adj_biosmem_param) < 0) {
 		perror("biosmem mmap failed");
 		goto err;
 	}
+	write_kmsg("%s map bios end---", KMSG_FMT);
 
 	/* dump hugepage really setup */
 	printf("\nreally setup hugepage with:\n");
