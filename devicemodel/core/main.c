@@ -930,6 +930,12 @@ dm_run(int argc, char *argv[])
 		}
 		write_kmsg("%s vm_setup_memory end---\n", KMSG_FMT);
 
+		err = system("/usr/share/acrn/conf/offline.sh");
+		if (err) {
+			fprintf(stderr, "Unable to setup memory (%d)\n", errno);
+			goto fail;
+		}
+
 		err = mevent_init();
 		if (err) {
 			fprintf(stderr, "Unable to initialize mevent (%d)\n",

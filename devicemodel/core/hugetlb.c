@@ -37,8 +37,13 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <assert.h>
+#include <pthread.h>
 
 #include "vmmapi.h"
+#include "dm.h"
+
+//#define _GNU_SOURCE
+//#include <sched.h>
 
 #define HUGETLB_LV1		0
 #define HUGETLB_LV2		1
@@ -120,9 +125,19 @@ static struct hugetlb_info hugetlb_priv[HUGETLB_LV_MAX] = {
 	},
 };
 
+struct metadata {
+	char *addr;
+	size_t len;
+	size_t pagesz;
+	pthread_t tid;
+	void *join_ret;
+};
+
 static void *ptr;
 static size_t total_size;
 static int hugetlb_lv_max;
+struct metadata maped_mem[10];
+int index_mem;
 
 static int open_hugetlbfs(struct vmctx *ctx, int level)
 {
@@ -214,6 +229,25 @@ static bool should_enable_hugetlb_level(int level)
 	        hugetlb_priv[level].highmem > 0);
 }
 
+static void* triger_kmem_clean(void *mem_key) {
+	struct metadata *mem_ctx = (struct metadata*)mem_key;
+	size_t pagesz, len;
+	char *addr;
+	int i;
+
+	pagesz = mem_ctx->pagesz;
+	len    = mem_ctx->len;
+	addr   = mem_ctx->addr;
+	write_kmsg("%s touch %ld pages with, len 0x%x pagesz 0x%lx, start from:%p, thread\n",
+			KMSG_FMT, len/pagesz, len, pagesz, addr);
+
+	for (i = 0; i < len/pagesz; i++) {
+		*(volatile char *)addr = *addr;
+		addr += pagesz;
+	}
+	return addr;
+}
+
 /*
  * level  : hugepage level
  * len	  : region length for mmap
@@ -225,13 +259,13 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 {
 	char *addr;
 	size_t pagesz = 0;
-	int fd, i;
+	int fd;
+	struct metadata mem_ctx;
 
 	if (level >= HUGETLB_LV_MAX) {
 		perror("exceed max hugetlb level");
 		return -EINVAL;
 	}
-
 	fd = hugetlb_priv[level].fd;
 	addr = mmap(ctx->baseaddr + offset, len, PROT_READ | PROT_WRITE,
 			MAP_SHARED | MAP_FIXED, fd, skip);
@@ -239,17 +273,27 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 		return -ENOMEM;
 
 	printf("mmap 0x%lx@%p\n", len, addr);
+	write_kmsg("mmap 0x%lx@%p\n", len, addr);
 
 	/* pre-allocate hugepages by touch them */
 	pagesz = hugetlb_priv[level].pg_size;
 
 	printf("touch %ld pages with pagesz 0x%lx\n", len/pagesz, pagesz);
+	write_kmsg("%s touch %ld pages with, len 0x%x pagesz 0x%lx, start from:%p\n",
+			KMSG_FMT, len/pagesz, len, pagesz, addr);
 
+
+	mem_ctx.addr = addr;
+	mem_ctx.len  = len;
+	mem_ctx.pagesz = pagesz;
+	index_mem += 1;
+	maped_mem[index_mem - 1] = mem_ctx;
+#if 0
 	for (i = 0; i < len/pagesz; i++) {
 		*(volatile char *)addr = *addr;
 		addr += pagesz;
 	}
-
+#endif
 	return 0;
 }
 
@@ -617,7 +661,7 @@ bool check_hugetlb_support(void)
 
 int hugetlb_setup_memory(struct vmctx *ctx)
 {
-	int level;
+	int level, i;
 	size_t lowmem, biosmem, highmem;
 	bool has_gap;
 
@@ -727,7 +771,7 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		}
 	}
 	printf("mmap ptr 0x%p -> baseaddr 0x%p\n", ptr, ctx->baseaddr);
-
+	write_kmsg("%s mmap cost begin---\n", KMSG_FMT);
 	/* mmap lowmem */
 	if (mmap_hugetlbfs(ctx, 0, get_lowmem_param, adj_lowmem_param) < 0) {
 		perror("lowmem mmap failed");
@@ -739,12 +783,17 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		perror("highmem mmap failed");
 		goto err;
 	}
-
 	/* mmap biosmem */
 	if (mmap_hugetlbfs(ctx, 4 * GB - ctx->biosmem,
 				get_biosmem_param, adj_biosmem_param) < 0) {
 		perror("biosmem mmap failed");
 		goto err;
+	}
+	write_kmsg("%s mmap cost end---\n", KMSG_FMT);
+
+	write_kmsg("%s pthread start---", KMSG_FMT);
+	for (i = 0; i < index_mem; i++) {
+		pthread_create(&maped_mem[i].tid, NULL, triger_kmem_clean, &maped_mem[i]);
 	}
 
 	/* dump hugepage really setup */
@@ -776,6 +825,10 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 			(uint64_t)(ctx->baseaddr + 4 * GB), PROT_ALL) < 0)
 			goto err;
 	}
+	for (i = 0; i < index_mem; i++) {
+		pthread_join(maped_mem[i].tid, &maped_mem[i].join_ret);
+	}
+	write_kmsg("%s join pthread end---", KMSG_FMT);
 
 	return 0;
 
