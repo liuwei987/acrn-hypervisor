@@ -929,13 +929,13 @@ dm_run(int argc, char *argv[])
 			goto fail;
 		}
 		write_kmsg("%s vm_setup_memory end---\n", KMSG_FMT);
-
+#if 0
 		err = system("/usr/share/acrn/conf/offline.sh");
 		if (err) {
 			fprintf(stderr, "Unable to setup memory (%d)\n", errno);
 			goto fail;
 		}
-
+#endif
 		err = mevent_init();
 		if (err) {
 			fprintf(stderr, "Unable to initialize mevent (%d)\n",
@@ -987,6 +987,13 @@ dm_run(int argc, char *argv[])
 		/*
 		 * Add CPU 0
 		 */
+#if 1
+		err = system("/usr/share/acrn/conf/offline.sh");
+		if (err) {
+			fprintf(stderr, "Unable to setup memory (%d)\n", errno);
+			goto fail;
+		}
+#endif
 		write_kmsg("%s add_cpu begin---\n", KMSG_FMT);
 		error = add_cpu(ctx, guest_ncpus);
 		if (error)

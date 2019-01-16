@@ -42,8 +42,7 @@
 #include "vmmapi.h"
 #include "dm.h"
 
-//#define _GNU_SOURCE
-//#include <sched.h>
+#include <sched.h>
 
 #define HUGETLB_LV1		0
 #define HUGETLB_LV2		1
@@ -137,7 +136,9 @@ static void *ptr;
 static size_t total_size;
 static int hugetlb_lv_max;
 struct metadata maped_mem[10];
+pthread_attr_t attr;
 int index_mem;
+int main_cpu;
 
 static int open_hugetlbfs(struct vmctx *ctx, int level)
 {
@@ -229,22 +230,57 @@ static bool should_enable_hugetlb_level(int level)
 	        hugetlb_priv[level].highmem > 0);
 }
 
+static int cpu_affinity(int j, int m_cpu)
+{
+	int i = j;
+	pthread_attr_init(&attr);
+	cpu_set_t mask;
+	CPU_ZERO(&mask);
+
+	m_cpu = m_cpu;
+	//if (i == 4) i = 1;
+#if 0
+	if (i == m_cpu) {
+		if (i == 0) {
+			i += 3;
+		}
+		if (i == 3) {
+			i -= 3;
+		}
+	}
+#endif
+	CPU_SET(i, &mask);
+
+	//if (pthread_setaffinity_np(mem_ctx->tid, sizeof(mask), &mask) == -1) {
+	if (pthread_attr_setaffinity_np(&attr, sizeof(mask), &mask) == -1) {
+		write_kmsg("%s pthread_setaffinity_np error");
+		return -1;
+	}
+
+	return 0;
+}
+
 static void* triger_kmem_clean(void *mem_key) {
 	struct metadata *mem_ctx = (struct metadata*)mem_key;
 	size_t pagesz, len;
+	pid_t tid;
 	char *addr;
 	int i;
 
+	tid = pthread_self();
 	pagesz = mem_ctx->pagesz;
 	len    = mem_ctx->len;
 	addr   = mem_ctx->addr;
-	write_kmsg("%s touch %ld pages with, len 0x%x pagesz 0x%lx, start from:%p, thread\n",
-			KMSG_FMT, len/pagesz, len, pagesz, addr);
-
+	//write_kmsg("%s touch %ld pages with, len 0x%x pagesz 0x%lx, start from:%p,thread--\n",
+	//		KMSG_FMT, len/pagesz, len, pagesz, addr);
+	fprintf(stderr, "before thread %u triger kmem clean---\n", tid);
+	write_kmsg("%s cpu:%d before thread %u triger kmem clean---\n",  KMSG_FMT, sched_getcpu(), tid);
 	for (i = 0; i < len/pagesz; i++) {
 		*(volatile char *)addr = *addr;
 		addr += pagesz;
 	}
+	fprintf(stderr, "afte thread %u triger kmem clean---\n", tid);
+	write_kmsg("%s cpu:%d afte thread %u triger kmem clean---\n", KMSG_FMT, sched_getcpu(), tid);
 	return addr;
 }
 
@@ -259,7 +295,7 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 {
 	char *addr;
 	size_t pagesz = 0;
-	int fd;
+	int fd, cnt_pg, index_pg;
 	struct metadata mem_ctx;
 
 	if (level >= HUGETLB_LV_MAX) {
@@ -282,12 +318,40 @@ static int mmap_hugetlbfs_from_level(struct vmctx *ctx, int level, size_t len,
 	write_kmsg("%s touch %ld pages with, len 0x%x pagesz 0x%lx, start from:%p\n",
 			KMSG_FMT, len/pagesz, len, pagesz, addr);
 
+#if 0
+	switch (len/pagesz) {
+	case 1:
+		break;
+	case 2:break;
+	case 3:break;
+	default:break;
+		;break;
+	}
+#endif
+#if 1
+	/* more than 5 page of pagesz will be the for 2M */
+	if (len/pagesz < 5) {
+		cnt_pg = len/pagesz;
+	} else {
+		cnt_pg = 0;
+		mem_ctx.len  = len;
+		mem_ctx.addr = addr;
+		mem_ctx.pagesz = pagesz;
+		index_mem += 1;
+		maped_mem[index_mem - 1] = mem_ctx;
+		write_kmsg("%s index 2M mem %d\n", KMSG_FMT, index_mem);
+	}
 
-	mem_ctx.addr = addr;
-	mem_ctx.len  = len;
-	mem_ctx.pagesz = pagesz;
-	index_mem += 1;
-	maped_mem[index_mem - 1] = mem_ctx;
+	/* handle the 1G mem metadat struct */
+	for (index_pg = 0; index_pg < cnt_pg; index_pg++) {
+		mem_ctx.len  = pagesz;
+		mem_ctx.addr = addr + index_pg * pagesz;
+		mem_ctx.pagesz = pagesz;
+		index_mem += 1;
+		maped_mem[index_mem - 1] = mem_ctx;
+		write_kmsg("%s index 1G mem %d\n", KMSG_FMT, index_mem);
+	}
+#endif
 #if 0
 	for (i = 0; i < len/pagesz; i++) {
 		*(volatile char *)addr = *addr;
@@ -790,12 +854,25 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 		goto err;
 	}
 	write_kmsg("%s mmap cost end---\n", KMSG_FMT);
-
-	write_kmsg("%s pthread start---", KMSG_FMT);
+	main_cpu = sched_getcpu();
+	write_kmsg("%s cpu%d pthread create begin---\n", KMSG_FMT, main_cpu);
 	for (i = 0; i < index_mem; i++) {
-		pthread_create(&maped_mem[i].tid, NULL, triger_kmem_clean, &maped_mem[i]);
+		cpu_affinity(i, main_cpu);
+		pthread_create(&maped_mem[i].tid, &attr, triger_kmem_clean, &maped_mem[i]);
 	}
+#if 1
+	for (i = 0; i < index_mem; i++) {
+		pthread_join(maped_mem[i].tid, &maped_mem[i].join_ret);
+	}
+	write_kmsg("%s join pthread end---\n", KMSG_FMT);
+#endif
+#if 0
+	for (i = 0; i < index_mem; i++) {
+		pthread_detach(maped_mem[i].tid);
+	}
+#endif
 
+	write_kmsg("%s pthread detach end---\n", KMSG_FMT);
 	/* dump hugepage really setup */
 	printf("\nreally setup hugepage with:\n");
 	for (level = HUGETLB_LV1; level < hugetlb_lv_max; level++) {
@@ -825,10 +902,6 @@ int hugetlb_setup_memory(struct vmctx *ctx)
 			(uint64_t)(ctx->baseaddr + 4 * GB), PROT_ALL) < 0)
 			goto err;
 	}
-	for (i = 0; i < index_mem; i++) {
-		pthread_join(maped_mem[i].tid, &maped_mem[i].join_ret);
-	}
-	write_kmsg("%s join pthread end---", KMSG_FMT);
 
 	return 0;
 
