@@ -41,24 +41,7 @@ fi
 mac=$(cat /sys/class/net/e*/address)
 vm_name=vm$1
 mac_seed=${mac:9:8}-${vm_name}
-
-# create a unique tap device for each VM
 tap=tap_$6
-tap_exist=$(ip a | grep acrn_"$tap" | awk '{print $1}')
-if [ "$tap_exist"x != "x" ]; then
-  echo "tap device existed, reuse acrn_$tap"
-else
-  ip tuntap add dev acrn_$tap mode tap
-fi
-
-# if acrn-br0 exists, add VM's unique tap device under it
-br_exist=$(ip a | grep acrn-br0 | awk '{print $1}')
-if [ "$br_exist"x != "x" -a "$tap_exist"x = "x" ]; then
-  echo "acrn-br0 bridge aleady exists, adding new tap device to it..."
-  ip link set acrn_"$tap" master acrn-br0
-  ip link set dev acrn_"$tap" down
-  ip link set dev acrn_"$tap" up
-fi
 
 #check if the vm is running or not
 vm_ps=$(pgrep -a -f acrn-dm)
@@ -146,6 +129,7 @@ else
   GVT_args=''
 fi
 
+source /usr/share/acrn/samples/apl-mrb/tap.sh $tap &
 
 acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio \
   -s 5,virtio-console,@pty:pty_port \
@@ -179,26 +163,7 @@ fi
 mac=$(cat /sys/class/net/e*/address)
 vm_name=vm$1
 mac_seed=${mac:9:8}-${vm_name}
-
-echo "dm_run: before tap preparing" > /dev/kmsg
-# create a unique tap device for each VM
 tap=tap_$6
-tap_exist=$(ip a | grep acrn_"$tap" | awk '{print $1}')
-if [ "$tap_exist"x != "x" ]; then
-  echo "tap device existed, reuse acrn_$tap"
-else
-  ip tuntap add dev acrn_$tap mode tap
-fi
-
-# if acrn-br0 exists, add VM's unique tap device under it
-br_exist=$(ip a | grep acrn-br0 | awk '{print $1}')
-if [ "$br_exist"x != "x" -a "$tap_exist"x = "x" ]; then
-  echo "acrn-br0 bridge aleady exists, adding new tap device to it..."
-  ip link set acrn_"$tap" master acrn-br0
-  ip link set dev acrn_"$tap" down
-  ip link set dev acrn_"$tap" up
-fi
-echo "dm_run: after tap preparing" > /dev/kmsg
 
 #Use MMC name + serial for ADB serial no., same as native android
 mmc_name=`cat /sys/block/mmcblk1/device/name`
@@ -350,7 +315,9 @@ else
 fi
 echo "dm_run: after passthru dev preparing" > /dev/kmsg
 
- acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio $npk_virt\
+source /usr/share/acrn/samples/apl-mrb/tap.sh $tap &
+
+acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio $npk_virt\
    -s 9,virtio-net,$tap \
    -s 3,virtio-blk$boot_dev_flag,/data/$5/$5.img \
    -s 7,xhci,1-1:1-2:1-3:2-1:2-2:2-3:cap=apl \
@@ -435,26 +402,6 @@ if [ $launch_type == 6 ]; then
 	  launch_type=1;
 	fi
 fi
-
-echo "dm_run: before offline cpu" > /dev/kmsg
-# offline SOS CPUs except BSP before launch UOS
-for i in `ls -d /sys/devices/system/cpu/cpu[1-99]`; do
-        online=`cat $i/online`
-        idx=`echo $i | tr -cd "[1-99]"`
-        echo cpu$idx online=$online
-        if [ "$online" = "1" ]; then
-                echo 0 > $i/online
-		online=`cat $i/online`
-		# during boot time, cpu hotplug may be disabled by pci_device_probe during a pci module insmod
-		while [ "$online" = "1" ]; do
-			sleep 0.1
-			echo 0 > $i/online
-			online=`cat $i/online`
-		done
-                echo $idx > /sys/class/vhm/acrn_vhm/offline_cpu
-        fi
-done
-echo "dm_run: after offline cpu" > /dev/kmsg
 
 case $launch_type in
 	1) echo "Launch clearlinux UOS"

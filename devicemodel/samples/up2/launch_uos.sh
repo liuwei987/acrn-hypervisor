@@ -40,21 +40,6 @@ mac_seed=${mac:9:8}-${vm_name}
 
 # create a unique tap device for each VM
 tap=tap_$6
-tap_exist=$(ip a | grep acrn_"$tap" | awk '{print $1}')
-if [ "$tap_exist"x != "x" ]; then
-  echo "tap device existed, reuse acrn_$tap"
-else
-  ip tuntap add dev acrn_$tap mode tap
-fi
-
-# if acrn-br0 exists, add VM's unique tap device under it
-br_exist=$(ip a | grep acrn-br0 | awk '{print $1}')
-if [ "$br_exist"x != "x" -a "$tap_exist"x = "x" ]; then
-  echo "acrn-br0 bridge aleady exists, adding new tap device to it..."
-  ip link set acrn_"$tap" master acrn-br0
-  ip link set dev acrn_"$tap" down
-  ip link set dev acrn_"$tap" up
-fi
 
 #check if the vm is running or not
 vm_ps=$(pgrep -a -f acrn-dm)
@@ -142,6 +127,7 @@ else
   GVT_args=''
 fi
 
+source /usr/share/acrn/samples/up2/tap.sh $tap &
 
 acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio \
   -s 5,virtio-console,@pty:pty_port \
@@ -178,21 +164,6 @@ mac_seed=${mac:9:8}-${vm_name}
 
 # create a unique tap device for each VM
 tap=tap_$6
-tap_exist=$(ip a | grep acrn_"$tap" | awk '{print $1}')
-if [ "$tap_exist"x != "x" ]; then
-  echo "tap device existed, reuse acrn_$tap"
-else
-  ip tuntap add dev acrn_$tap mode tap
-fi
-
-# if acrn-br0 exists, add VM's unique tap device under it
-br_exist=$(ip a | grep acrn-br0 | awk '{print $1}')
-if [ "$br_exist"x != "x" -a "$tap_exist"x = "x" ]; then
-  echo "acrn-br0 bridge aleady exists, adding new tap device to it..."
-  ip link set acrn_"$tap" master acrn-br0
-  ip link set dev acrn_"$tap" down
-  ip link set dev acrn_"$tap" up
-fi
 
 #Use MMC name + serial for ADB serial no., same as native android
 mmc_name=`cat /sys/block/mmcblk0/device/name`
@@ -331,7 +302,9 @@ else
   GVT_args=''
 fi
 
- acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio $npk_virt\
+source /usr/share/acrn/samples/up2/tap.sh $tap &
+
+acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio $npk_virt\
    -s 9,virtio-net,$tap \
    -s 3,virtio-blk$boot_dev_flag,/data/$5/$5.img \
    -s 7,xhci,1-1:1-2:1-3:2-1:2-2:2-3:cap=apl \
