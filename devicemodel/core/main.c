@@ -955,6 +955,10 @@ dm_run(int argc, char *argv[])
 
 		write_kmsg("%s smbios_build end---\n", KMSG_FMT);
 
+#ifdef DM_BOARD
+		error = system("/usr/share/acrn/samples/"DM_BOARD"/offline_cpu.sh");
+#endif
+
 		if (acpi) {
 			error = acpi_build(ctx, guest_ncpus);
 			if (error)

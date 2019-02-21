@@ -199,7 +199,13 @@ $(VERSION_H):
 	echo "#define DM_DAILY_TAG "\""$$DAILY_TAG"\""" >> $(VERSION_H);\
 	echo "#define DM_BUILD_VERSION "\""$$PATCH"\""" >> $(VERSION_H);\
 	echo "#define DM_BUILD_TIME "\""$$TIME"\""" >> $(VERSION_H);\
-	echo "#define DM_BUILD_USER "\""$$USER"\""" >> $(VERSION_H)
+	echo "#define DM_BUILD_USER "\""$$USER"\""" >> $(VERSION_H);\
+	if [ "$(BOARD)"x = "apl-nuc"x ];then\
+		DM_BOARD=nuc;\
+		echo "#define DM_BOARD "\""$$DM_BOARD"\""" >> $(VERSION_H);\
+	elif [ "$(BOARD)"x = "apl-mrb"x ];then\
+		echo "#define DM_BOARD "\""$$BOARD"\""" >> $(VERSION_H);\
+	fi
 
 $(DM_OBJDIR)/%.o: %.c $(HEADERS)
 	[ ! -e $@ ] && mkdir -p $(dir $@); \
