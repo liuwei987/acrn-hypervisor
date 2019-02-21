@@ -57,7 +57,7 @@ if [ "$br_exist"x != "x" -a "$tap_exist"x = "x" ]; then
 fi
 
 #check if the vm is running or not
-vm_ps=$(pgrep -a -f acrn-dm)
+vm_ps=$(pgrep -a -f acrn-dm.apl-up2)
 result=$(echo $vm_ps | grep "${vm_name}")
 if [[ "$result" != "" ]]; then
   echo "$vm_name is running, can't create twice!"
@@ -133,7 +133,7 @@ fi
 #threshold/s,probe-period(s),intr-inject-delay-time(ms),delay-duration(ms)
 intr_storm_monitor="--intr_monitor 10000,10,1,100"
 
-acrn-dm --help 2>&1 | grep 'GVT args'
+acrn-dm.apl-up2 --help 2>&1 | grep 'GVT args'
 if [ $? == 0 ];then
   GVT_args=$3
   boot_GVT_option=" -s 0:2:0,pci-gvt -G "
@@ -143,7 +143,7 @@ else
 fi
 
 
-acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio \
+acrn-dm.apl-up2 -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio \
   -s 5,virtio-console,@pty:pty_port \
   -s 6,virtio-hyper_dmabuf \
   -s 8,wdt-i6300esb \
@@ -200,7 +200,7 @@ mmc_serial=`cat /sys/block/mmcblk0/device/serial | sed -n 's/^..//p'`
 ser=$mmc_name$mmc_serial
 
 #check if the vm is running or not
-vm_ps=$(pgrep -a -f acrn-dm)
+vm_ps=$(pgrep -a -f acrn-dm.apl-up2)
 result=$(echo $vm_ps | grep "${vm_name}")
 if [[ "$result" != "" ]]; then
   echo "$vm_name is running, can't create twice!"
@@ -322,7 +322,7 @@ ACRN project
 #threshold/s,probe-period(s),intr-inject-delay-time(ms),delay-duration(ms)
 intr_storm_monitor="--intr_monitor 10000,10,1,100"
 
-acrn-dm --help 2>&1 | grep 'GVT args'
+acrn-dm.apl-up2 --help 2>&1 | grep 'GVT args'
 if [ $? == 0 ];then
   GVT_args=$3
   boot_GVT_option=" -s 2,pci-gvt -G "
@@ -331,7 +331,7 @@ else
   GVT_args=''
 fi
 
- acrn-dm -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio $npk_virt\
+acrn-dm.apl-up2 -A -m $mem_size -c $2$boot_GVT_option"$GVT_args" -s 0:0,hostbridge -s 1:0,lpc -l com1,stdio $npk_virt\
    -s 9,virtio-net,$tap \
    -s 3,virtio-blk$boot_dev_flag,/data/$5/$5.img \
    -s 7,xhci,1-1:1-2:1-3:2-1:2-2:2-3:cap=apl \
@@ -408,24 +408,6 @@ if [ $launch_type == 6 ]; then
 	  launch_type=1;
 	fi
 fi
-
-# offline SOS CPUs except BSP before launch UOS
-for i in `ls -d /sys/devices/system/cpu/cpu[1-99]`; do
-        online=`cat $i/online`
-        idx=`echo $i | tr -cd "[1-99]"`
-        echo cpu$idx online=$online
-        if [ "$online" = "1" ]; then
-                echo 0 > $i/online
-		online=`cat $i/online`
-		# during boot time, cpu hotplug may be disabled by pci_device_probe during a pci module insmod
-		while [ "$online" = "1" ]; do
-			sleep 1
-			echo 0 > $i/online
-			online=`cat $i/online`
-		done
-                echo $idx > /sys/class/vhm/acrn_vhm/offline_cpu
-        fi
-done
 
 case $launch_type in
 	1) echo "Launch clearlinux UOS"

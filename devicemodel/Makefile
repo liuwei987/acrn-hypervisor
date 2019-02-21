@@ -150,9 +150,10 @@ HEADERS += $(VERSION_H) $(VMCFG_CONFIG_H)
 
 DISTCLEAN_OBJS := $(shell find $(BASEDIR) -name '*.o')
 
-PROGRAM := acrn-dm
+PROGRAM := acrn-dm.$(BOARD)
 
 SAMPLES_NUC := $(wildcard samples/nuc/*)
+SAMPLES_UP2 := $(wildcard samples/up2/*)
 SAMPLES_MRB := $(wildcard samples/apl-mrb/*)
 
 BIOS_BIN := $(wildcard bios/*)
@@ -199,22 +200,36 @@ $(VERSION_H):
 	echo "#define DM_DAILY_TAG "\""$$DAILY_TAG"\""" >> $(VERSION_H);\
 	echo "#define DM_BUILD_VERSION "\""$$PATCH"\""" >> $(VERSION_H);\
 	echo "#define DM_BUILD_TIME "\""$$TIME"\""" >> $(VERSION_H);\
-	echo "#define DM_BUILD_USER "\""$$USER"\""" >> $(VERSION_H)
+	echo "#define DM_BUILD_USER "\""$$USER"\""" >> $(VERSION_H);\
+	if [ "$(BOARD)"x = "apl-nuc"x ];then\
+		DM_BOARD=nuc;\
+		echo "#define DM_BOARD "\""$$DM_BOARD"\""" >> $(VERSION_H);\
+	elif [ "$(BOARD)"x = "apl-mrb"x ];then\
+		echo "#define DM_BOARD "\""$$BOARD"\""" >> $(VERSION_H);\
+	elif [ "$(BOARD)"x = "apl-up2"x ];then\
+		DM_BOARD=up2;\
+		echo "#define DM_BOARD "\""$$DM_BOARD"\""" >> $(VERSION_H);\
+	fi
 
 $(DM_OBJDIR)/%.o: %.c $(HEADERS)
 	[ ! -e $@ ] && mkdir -p $(dir $@); \
 	$(CC) $(CFLAGS) -c $< -o $@
 
-install: $(DM_OBJDIR)/$(PROGRAM) install-samples-nuc install-samples-mrb install-bios install-vmcfg
-	install -D --mode=0755 $(DM_OBJDIR)/$(PROGRAM) $(DESTDIR)/usr/bin/$(PROGRAM)
+install: $(DM_OBJDIR)/$(PROGRAM) install-samples-nuc install-samples-up2 install-samples-mrb install-bios install-vmcfg
 
 install-samples-nuc: $(SAMPLES_NUC)
 	install -D -t $(DESTDIR)/usr/share/acrn/samples/nuc $^
+	install -D --mode=0755 $(DM_OBJDIR)/acrn-dm.apl-nuc $(DESTDIR)/usr/bin/
+
+install-samples-up2: $(SAMPLES_UP2)
+	install -D -t $(DESTDIR)/usr/share/acrn/samples/up2 $^
+	install -D --mode=0755 $(DM_OBJDIR)/acrn-dm.apl-up2 $(DESTDIR)/usr/bin/
 
 install-samples-mrb: $(SAMPLES_MRB)
 	install -D -t $(DESTDIR)/usr/share/acrn/samples/apl-mrb $^
 	install -d $(DESTDIR)/usr/lib/systemd/system/
 	install -p -D -m 0644 ./samples/apl-mrb/acrn_guest.service $(DESTDIR)/usr/lib/systemd/system
+	install -D --mode=0755 $(DM_OBJDIR)/acrn-dm.apl-mrb $(DESTDIR)/usr/bin/
 
 install-bios: $(BIOS_BIN)
 	install -d $(DESTDIR)/usr/share/acrn/bios

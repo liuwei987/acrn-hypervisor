@@ -41,6 +41,11 @@ BUILD_VERSION ?=
 BUILD_TAG ?=
 export TOOLS_OUT
 
+acrn-dm_platforms = apl-mrb apl-nuc apl-up2
+define acrn-dm_generate
+	make -C $(T)/devicemodel DM_OBJDIR=$(DM_OUT) BOARD=$(1) DM_BUILD_VERSION=$(BUILD_VERSION) DM_BUILD_TAG=$(BUILD_TAG);
+endef
+
 .PHONY: all hypervisor devicemodel tools doc
 all: hypervisor devicemodel tools
 
@@ -59,7 +64,7 @@ sbl-hypervisor:
 
 devicemodel: tools
 	make -C $(T)/devicemodel DM_OBJDIR=$(DM_OUT) clean
-	make -C $(T)/devicemodel DM_OBJDIR=$(DM_OUT) DM_BUILD_VERSION=$(BUILD_VERSION) DM_BUILD_TAG=$(BUILD_TAG)
+	$(foreach var,$(acrn-dm_platforms),$(call acrn-dm_generate,$(var)))
 
 tools:
 	mkdir -p $(TOOLS_OUT)
