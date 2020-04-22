@@ -40,7 +40,6 @@ PT_SLOT = {
         "lpc":1,
         "pci-gvt":2,
         "virtio-blk":3,
-        "audio_codec":24
     }
 
 
@@ -428,6 +427,9 @@ def get_slot(bdf_list, dev):
             else:
                 # add already used slot for pass-throught devices to avoid conflict with virtio devices
                 PT_SLOT[dev] = slot
+                # to check exist slot in PT_SLOT list:
+                for for_each_slot in PT_SLOT:
+                    if isinstance(slot, int):
 
             slot_list[p_id] = slot_fun
 
