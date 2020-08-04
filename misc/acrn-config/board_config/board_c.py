@@ -147,8 +147,8 @@ def gen_rdt_res(config):
 
     print("\n#ifdef CONFIG_RDT_ENABLED", file=config)
     if len(rdt_resources) == 0 or common_clos_max == 0:
-        print("struct platform_clos_info platform_{0}_clos_array[MAX_PLATFORM_CLOS_NUM];".format("l2"), file=config)
-        print("struct platform_clos_info platform_{0}_clos_array[MAX_PLATFORM_CLOS_NUM];".format("l3"), file=config)
+        print("struct platform_clos_info platform_{0}_clos_array[MAX_CACHE_CLOS_NUM_ENTRIES];".format("l2"), file=config)
+        print("struct platform_clos_info platform_{0}_clos_array[MAX_CACHE_CLOS_NUM_ENTRIES];".format("l3"), file=config)
         print("struct platform_clos_info platform_{0}_clos_array[MAX_MBA_CLOS_NUM_ENTRIES];".format("mba"), file=config)
     else:
         for idx, rdt_res in enumerate(rdt_resources):
@@ -178,9 +178,9 @@ def gen_rdt_res(config):
                 return err_dic
 
         if res_present[RDT.L2.value] == 0:
-            print("struct platform_clos_info platform_{0}_clos_array[{1}];".format("l2", "MAX_PLATFORM_CLOS_NUM"), file=config)
+            print("struct platform_clos_info platform_{0}_clos_array[{1}];".format("l2", "MAX_CACHE_CLOS_NUM_ENTRIES"), file=config)
         if res_present[RDT.L3.value] == 0:
-            print("struct platform_clos_info platform_{0}_clos_array[{1}];".format("l3", "MAX_PLATFORM_CLOS_NUM"), file=config)
+            print("struct platform_clos_info platform_{0}_clos_array[{1}];".format("l3", "MAX_CACHE_CLOS_NUM_ENTRIES"), file=config)
         if res_present[RDT.MBA.value] == 0:
             print("struct platform_clos_info platform_{0}_clos_array[{1}];".format("mba", "MAX_MBA_CLOS_NUM_ENTRIES"), file=config)
 
