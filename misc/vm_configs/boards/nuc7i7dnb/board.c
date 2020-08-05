@@ -21,6 +21,7 @@
 #include <vtd.h>
 #include <msr.h>
 #include <pci.h>
+#include <misc_cfg.h>
 
 static struct dmar_dev_scope drhd0_dev_scope[DRHD0_DEV_CNT] = {
 	{
@@ -71,8 +72,8 @@ struct dmar_info plat_dmar_info = {
 };
 
 #ifdef CONFIG_RDT_ENABLED
-struct platform_clos_info platform_l2_clos_array[MAX_PLATFORM_CLOS_NUM];
-struct platform_clos_info platform_l3_clos_array[MAX_PLATFORM_CLOS_NUM];
+struct platform_clos_info platform_l2_clos_array[MAX_CACHE_CLOS_NUM_ENTRIES];
+struct platform_clos_info platform_l3_clos_array[MAX_CACHE_CLOS_NUM_ENTRIES];
 struct platform_clos_info platform_mba_clos_array[MAX_MBA_CLOS_NUM_ENTRIES];
 #endif
 

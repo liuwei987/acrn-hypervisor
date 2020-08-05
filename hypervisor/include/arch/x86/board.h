@@ -28,8 +28,13 @@ struct vmsix_on_msi_info {
 extern struct dmar_info plat_dmar_info;
 
 #ifdef CONFIG_RDT_ENABLED
-extern struct platform_clos_info platform_l2_clos_array[MAX_PLATFORM_CLOS_NUM];
-extern struct platform_clos_info platform_l3_clos_array[MAX_PLATFORM_CLOS_NUM];
+#ifndef CONFIG_CDP_ENABLED
+#define MAX_CACHE_CLOS_NUM_ENTRIES MAX_PLATFORM_CLOS_NUM
+#else
+#define MAX_CACHE_CLOS_NUM_ENTRIES (MAX_PLATFORM_CLOS_NUM * 2)
+#endif
+extern struct platform_clos_info platform_l2_clos_array[MAX_CACHE_CLOS_NUM_ENTRIES];
+extern struct platform_clos_info platform_l3_clos_array[MAX_CACHE_CLOS_NUM_ENTRIES];
 extern struct platform_clos_info platform_mba_clos_array[MAX_MBA_CLOS_NUM_ENTRIES];
 #endif
 
